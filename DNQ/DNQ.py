@@ -1,2 +1,2 @@
-import gym
+import gymnasium
 print(111)
