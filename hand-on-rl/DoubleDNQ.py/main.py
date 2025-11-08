@@ -54,7 +54,7 @@ def main():
         print("\n⚠️ 训练被中断，保存当前进度...")
         # 保存模型和缓冲区
         trainer.save_replay_buffer(replay_buffer_file)
-        save_path = "doubledqn_model_interrupted.pth"
+        save_path = "C:\Users\Administrator\Desktop\rl-learn\savafiles\doubledqn_model_interrupted.pth"
         torch.save(trainer.q_net.state_dict(), save_path)
         print(f"💾 中断进度已保存到 {save_path} 和 {replay_buffer_file}")
 
