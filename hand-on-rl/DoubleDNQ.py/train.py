@@ -8,23 +8,25 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 import tqdm
+import pickle
+import os
 class Trainer():
 
-    def __init__(self,config:Config,model:Model):
+    def __init__(self, config:Config, model_class):  # 这里接收的是类，不是实例
 
-        self.config          = config
-        self.model           = model
-        self.env             = self.config.env
-        self.device          = self.config.device
+        self.config = config
+        self.env = self.config.env
+        self.device = self.config.device
         self.current_epsilon = 1
-        self.replay_buffer   = deque(maxlen=self.config.repalyBufferSize)
-        self.frame_stack     = deque(maxlen=4)
-        in_channels          = 4
-        n_actions            = self.env.action_space.n
+        self.replay_buffer = deque(maxlen=self.config.repalyBufferSize)
+        self.frame_stack = deque(maxlen=4)
+        in_channels = 4
+        n_actions = self.env.action_space.n
 
+        # 修正：创建模型实例
+        self.target_net = model_class(in_channels, n_actions).to(self.config.device)
+        self.q_net = model_class(in_channels, n_actions).to(self.config.device)
         
-        self.target_net = self.model(in_channels,n_actions).to(self.config.device)
-        self.q_net      = self.model(in_channels,n_actions).to(self.config.device)
         self.target_net.load_state_dict(self.q_net.state_dict())
         self.target_net.eval()
 
@@ -92,26 +94,71 @@ class Trainer():
     def decay_epsilon(self,episode):
         self.current_epsilon = self.config.min_epsilon + ( self.config.max_epsilon - self.config.min_epsilon ) * np.exp(-self.config.decay_rate * episode)
     
-    #填充
-    def prefill_relaybuffer(self):
-
+    def save_replay_buffer(self, filepath="C:\Users\Administrator\Desktop\rl-learn\savafiles\replay_buffer.pkl"):
+        """保存经验回放缓冲区到文件"""
+        try:
+            with open(filepath, 'wb') as f:
+                # 将 deque 转换为 list 再保存
+                buffer_list = list(self.replay_buffer)
+                pickle.dump(buffer_list, f)
+            print(f"💾 经验回放缓冲区已保存到 {filepath}，包含 {len(buffer_list)} 条经验")
+            return True
+        except Exception as e:
+            print(f"❌ 保存经验回放缓冲区失败: {e}")
+            return False
+    
+    def load_replay_buffer(self, filepath="C:\Users\Administrator\Desktop\rl-learn\savafiles\replay_buffer.pkl"):
+        """从文件加载经验回放缓冲区"""
+        try:
+            if os.path.exists(filepath):
+                with open(filepath, 'rb') as f:
+                    buffer_list = pickle.load(f)
+                self.replay_buffer.clear()
+                self.replay_buffer.extend(buffer_list)
+                print(f"📥 经验回放缓冲区已从 {filepath} 加载，包含 {len(self.replay_buffer)} 条经验")
+                return True
+            else:
+                print(f"⚠️ 经验回放缓冲区文件 {filepath} 不存在")
+                return False
+        except Exception as e:
+            print(f"❌ 加载经验回放缓冲区失败: {e}")
+            return False
+    
+    def prefill_relaybuffer(self, force_refill=False):
+        """预填充经验回放缓冲区，如果已有数据则跳过"""
+        # 检查是否已经有足够的数据
+        if not force_refill and len(self.replay_buffer) >= self.config.repalyBufferSize * 0.8:
+            print(f"✅ 经验回放缓冲区已有 {len(self.replay_buffer)} 条数据，跳过预填充")
+            return
+        
+        print("🧠 正在预填充经验回放缓冲区...")
         self.initial_frame_stack()
         state = self.get_current_framestack()
         
-        for _ in range(self.config.repalyBufferSize):
+        fill_target = self.config.repalyBufferSize
+        current_size = len(self.replay_buffer)
+        
+        # 只填充到目标大小
+        for i in range(fill_target - current_size):
             action = self.env.action_space.sample()
-            next_state_frame,reward,done,truncated,info = self.env.step(action)
+            next_state_frame, reward, done, truncated, info = self.env.step(action)
             processed_frame = self.process_frame(next_state_frame)
             self.frame_stack.append(processed_frame)
-
             next_state = self.get_current_framestack()
             
-            self.replaybuffer_push(state,action,reward,next_state,done)
+            self.replaybuffer_push(state, action, reward, next_state, done)
+            
             if done:
                 self.initial_frame_stack()
                 state = self.get_current_framestack()
             else:
                 state = next_state
+            
+            # 显示进度
+            if (i + 1) % 1000 == 0:
+                print(f"  填充进度: {current_size + i + 1}/{fill_target}")
+        
+        print(f"✅ 经验回放预填充完成，当前总量: {len(self.replay_buffer)} 条")
                 
     def train(self):
         # 换到 config 的初始 epsilon
@@ -195,11 +242,11 @@ class Trainer():
                 if done or truncated:
                     break
 
-                if episode % 2000 == 0 and episode > 0:
-                    avg_loss = total_loss / (step + 1e-8)
-                    print(f"\n📊 Episode {episode:6d} | "
-                          f"Reward: {episode_reward:.2f} | "
-                          f"Epsilon: {self.current_epsilon:.4f} | "
-                          f"Loss: {avg_loss:.6f} | "
-                          f"ReplayBuffer: {len(self.replay_buffer)}")
+            if episode % 10 == 0 and episode > 0:
+                avg_loss = total_loss / (step + 1e-8)
+                print(f"\n📊 Episode {episode:6d} | "
+                        f"Reward: {episode_reward:.2f} | "
+                        f"Epsilon: {self.current_epsilon:.4f} | "
+                        f"Loss: {avg_loss:.6f} | "
+                        f"ReplayBuffer: {len(self.replay_buffer)}")
                 

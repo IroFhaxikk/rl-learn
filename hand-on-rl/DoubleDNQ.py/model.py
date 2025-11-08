@@ -18,6 +18,7 @@ class Model(nn.Module):
         self.fc2 = nn.Linear(512, n_actions)
 
     def forward(self, x):
+        # print(x.shape)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
