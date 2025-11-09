@@ -94,7 +94,7 @@ class Trainer():
     def decay_epsilon(self,episode):
         self.current_epsilon = self.config.min_epsilon + ( self.config.max_epsilon - self.config.min_epsilon ) * np.exp(-self.config.decay_rate * episode)
     
-    def save_replay_buffer(self, filepath="C:\Users\Administrator\Desktop\rl-learn\savafiles\replay_buffer.pkl"):
+    def save_replay_buffer(self, filepath=r"C:\Users\Administrator\Desktop\rl-learn\savafiles\replay_buffer.pkl"):
         """保存经验回放缓冲区到文件"""
         try:
             with open(filepath, 'wb') as f:
@@ -104,10 +104,10 @@ class Trainer():
             print(f"💾 经验回放缓冲区已保存到 {filepath}，包含 {len(buffer_list)} 条经验")
             return True
         except Exception as e:
-            print(f"❌ 保存经验回放缓冲区失败: {e}")
+            print(f" 保存经验回放缓冲区失败: {e}")
             return False
     
-    def load_replay_buffer(self, filepath="C:\Users\Administrator\Desktop\rl-learn\savafiles\replay_buffer.pkl"):
+    def load_replay_buffer(self, filepath=r"C:\Users\Administrator\Desktop\rl-learn\savafiles\replay_buffer.pkl"):
         """从文件加载经验回放缓冲区"""
         try:
             if os.path.exists(filepath):
@@ -118,20 +118,20 @@ class Trainer():
                 print(f"📥 经验回放缓冲区已从 {filepath} 加载，包含 {len(self.replay_buffer)} 条经验")
                 return True
             else:
-                print(f"⚠️ 经验回放缓冲区文件 {filepath} 不存在")
+                print(f" 经验回放缓冲区文件 {filepath} 不存在")
                 return False
         except Exception as e:
-            print(f"❌ 加载经验回放缓冲区失败: {e}")
+            print(f" 加载经验回放缓冲区失败: {e}")
             return False
     
     def prefill_relaybuffer(self, force_refill=False):
         """预填充经验回放缓冲区，如果已有数据则跳过"""
         # 检查是否已经有足够的数据
         if not force_refill and len(self.replay_buffer) >= self.config.repalyBufferSize * 0.8:
-            print(f"✅ 经验回放缓冲区已有 {len(self.replay_buffer)} 条数据，跳过预填充")
+            print(f" 经验回放缓冲区已有 {len(self.replay_buffer)} 条数据，跳过预填充")
             return
         
-        print("🧠 正在预填充经验回放缓冲区...")
+        print(" 正在预填充经验回放缓冲区...")
         self.initial_frame_stack()
         state = self.get_current_framestack()
         
@@ -158,7 +158,7 @@ class Trainer():
             if (i + 1) % 1000 == 0:
                 print(f"  填充进度: {current_size + i + 1}/{fill_target}")
         
-        print(f"✅ 经验回放预填充完成，当前总量: {len(self.replay_buffer)} 条")
+        print(f" 经验回放预填充完成，当前总量: {len(self.replay_buffer)} 条")
                 
     def train(self):
         # 换到 config 的初始 epsilon
@@ -244,7 +244,7 @@ class Trainer():
 
             if episode % 10 == 0 and episode > 0:
                 avg_loss = total_loss / (step + 1e-8)
-                print(f"\n📊 Episode {episode:6d} | "
+                print(f"\nEpisode {episode:6d} | "
                         f"Reward: {episode_reward:.2f} | "
                         f"Epsilon: {self.current_epsilon:.4f} | "
                         f"Loss: {avg_loss:.6f} | "
