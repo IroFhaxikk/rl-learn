@@ -2,5 +2,9 @@
     "python.analysis.extraPaths": [
         "./model_sample/ ",
         "./hand-on-rl/Q-learning.py/ "
+    ],
+    "cursorpyright.analysis.extraPaths": [
+        "./model_sample/ ",
+        "./hand-on-rl/Q-learning.py/ "
     ]
 }

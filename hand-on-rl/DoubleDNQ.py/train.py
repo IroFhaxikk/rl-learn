@@ -185,11 +185,18 @@ class Trainer():
             # 把 q_net 设为训练模式（dropout/bn 等）
             self.q_net.train()
             while not done and not truncated:
+                # 动态线性 ε 衰减（按步数）
+                decay_steps = getattr(self.config, "epsilon_decay_steps", 1_000_000)
+                frac = min(1.0, global_step / max(1, decay_steps))
+                self.current_epsilon = self.config.max_epsilon - frac * (self.config.max_epsilon - self.config.min_epsilon)
+
                 # ---------------- 1) 选择动作（ε-greedy）
                 action = self.select_action(state)   # 传入 state（4帧堆叠），不是单帧 obs
 
                 # ---------------- 2) 与环境交互，更新 frame stack
                 next_obs, reward, done, truncated, info = self.env.step(action)
+                # 奖励裁剪到 [-1, 1]（Atari 经典做法）
+                reward = float(np.clip(reward, -1.0, 1.0))
                 processed_obs = self.process_frame(next_obs)
                 self.frame_stack.append(processed_obs)
                 next_state = self.get_current_framestack()
@@ -198,39 +205,40 @@ class Trainer():
                 self.replaybuffer_push(state, action, reward, next_state, done)
 
                 # ---------------- 4) 训练：从 replay buffer 采样并更新网络
-                batch = self.replayBuffer_Sample()
-                if batch is not None:
-                    states, actions, rewards, next_states, dones = batch
-                    # states: (B,4,84,84) tensors on device
+                # 仅在预热完成且到达训练频率时更新网络
+                if global_step >= getattr(self.config, "learning_starts", 0) and (global_step % getattr(self.config, "train_freq", 1) == 0):
+                    batch = self.replayBuffer_Sample()
+                    if batch is not None:
+                        states, actions, rewards, next_states, dones = batch
+                        # states: (B,4,84,84) tensors on device
 
-                    # Double DQN 目标计算
-                    # current Q for taken actions
-                    q_values = self.q_net(states).gather(1, actions)  # (B,1)
+                        # Double DQN 目标计算
+                        # current Q for taken actions
+                        q_values = self.q_net(states).gather(1, actions)  # (B,1)
 
-                    # online net selects the best next action
-                    next_actions = self.q_net(next_states).argmax(1).unsqueeze(1)  # (B,1)
+                        # online net selects the best next action
+                        next_actions = self.q_net(next_states).argmax(1).unsqueeze(1)  # (B,1)
 
-                    # target net evaluates that action
-                    next_q_values = self.target_net(next_states).gather(1, next_actions)  # (B,1)
+                        # target net evaluates that action
+                        next_q_values = self.target_net(next_states).gather(1, next_actions)  # (B,1)
 
-                    # compute TD target (detach next_q_values)
-                    target_q = rewards + (1.0 - dones) * self.config.gamma * next_q_values.detach()  # (B,1)
+                        # compute TD target (detach next_q_values)
+                        target_q = rewards + (1.0 - dones) * self.config.gamma * next_q_values.detach()  # (B,1)
 
-                    # loss (Huber)
-                    loss = loss_fn(q_values, target_q)
+                        # loss (Huber)
+                        loss = loss_fn(q_values, target_q)
 
-                    # backward + step
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    # 可选：梯度裁剪
-                    if getattr(self.config, "max_grad_norm", None) is not None:
-                        torch.nn.utils.clip_grad_norm_(self.q_net.parameters(), self.config.max_grad_norm)
-                    self.optimizer.step()
-                    total_loss += loss.item()
+                        # backward + step
+                        self.optimizer.zero_grad()
+                        loss.backward()
+                        # 梯度裁剪
+                        if getattr(self.config, "max_grad_norm", None) is not None:
+                            torch.nn.utils.clip_grad_norm_(self.q_net.parameters(), self.config.max_grad_norm)
+                        self.optimizer.step()
+                        total_loss += loss.item()
                 # ---------------- 5) 更新计数、target 网络、epsilon、state
                 step += 1
                 global_step += 1
-                self.decay_epsilon(episode)
                 episode_reward += reward
                 state = next_state
 
